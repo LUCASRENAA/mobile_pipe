@@ -1,0 +1,82 @@
+# .github/workflows/android_ci_seguro.yml
+
+name: Android CI Seguro (Todas as Branches)
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+jobs:
+  build_test_secure_check:
+    permissions:
+      contents: read
+      # Adicionar permissão para escrever eventos de segurança é recomendado 
+      # se você quiser que o Trivy envie os resultados para o GitHub Code Scanning.
+      security-events: write 
+
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout do Código
+        # É bom manter o fetch-depth maior que 1 ou 0 para o Trivy
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Necessário para uma varredura completa
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Permissões de Execução para Gradle Wrapper
+        run: chmod +x gradlew
+
+      # =========================================================
+      # NOVO PASSO: Análise de Vulnerabilidade de Dependências com Trivy
+      # =========================================================
+      - name: Scanner de Vulnerabilidades com Trivy
+        uses: aquasecurity/trivy-action@master # Fixe em um SHA ou versão para segurança máxima
+        with:
+          # Tipo de varredura: filesystem (busca manifestos de dependência)
+          scan-type: 'fs' 
+          # O ponto '.' indica a varredura no diretório atual (o root do seu repo)
+          scan-ref: '.' 
+          # Níveis de severidade que farão o job falhar (CRITICAL e HIGH)
+          severity: 'CRITICAL,HIGH' 
+          # Formato para integrar com a aba 'Security' do GitHub
+          format: 'github' 
+          output: 'trivy-results.sarif'
+          # Define se o job deve falhar se encontrar vulnerabilidades
+          exit-code: '1' 
+
+      # PASSO Opcional: Upload dos resultados do Trivy para o GitHub Code Scanning
+      - name: Upload dos resultados para Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          
+      - name: Análise Estática de Código (Lint)
+        run: ./gradlew lintDebug
+
+      - name: Executar Testes Unitários
+        run: ./gradlew testDebugUnitTest
+
+      # ... (Restante dos seus passos: build e upload)
+      
+      - name: Montar a Build de Debug (Exemplo)
+        if: github.event_name != 'pull_request'
+        run: ./gradlew assembleDebug
+
+      - name: Upload do Artefato (APK)
+        if: github.event_name != 'pull_request' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk-${{ github.ref_name }}
+          path: app/build/outputs/apk/debug/app-debug.apk
