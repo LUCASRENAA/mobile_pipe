@@ -50,7 +50,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.20.0 
         with:
           scan-type: 'fs'
-          scan-ref: 'build.gradle.kts'
+          scan-ref: 'app/build.gradle.kts'
           
           # Configuração de Quebra de Build (FAIL FAST)
           # A build falhará se encontrar vulnerabilidades Críticas ou Altas.
